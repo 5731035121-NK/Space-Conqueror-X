@@ -1,119 +1,176 @@
 package entity;
 
-import entity.animation.LiveAnimation;
-import game.MainGame;
+import game.GameManager;
+import game.gamescene.StageScene;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
-import java.awt.Point;
 import java.awt.Polygon;
-import java.awt.Shape;
 import java.awt.event.KeyEvent;
-import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 
 import utility.GameConstant;
 import utility.ImageSpriteLoader;
-import utility.InputHandler;
-import utility.RenderManager;
+import utility.InputUtility;
+import utility.PlayerConstant;
 
 public class Player extends Entity implements IShootable {
 	
-	private static final int SHOOT_DELAY = 30;
-	private static final int RESPWAN_DELAY = 10;
+	private static final int SHOOT_DELAY = 50;
+	private static final int DESTROY_FRAME_DELAY = 20;
 	
-	private int fireCooldown, respawnCount;
-	private int speed;
+	private int fireCooldown, moveCount, moveDuration = 2;
+	private int frameCount, frameDuration = 4;
+	
+	private int speed, speedY = 4;
 	private double damage;
 	private boolean sheilded, disabledShoot;
-	private Animation animation;
 	private ArrayList<Particle> particle;
 	
-	public Player(int health, int speed, double damage) {
-		super(health, MainGame.WIDTH/2, MainGame.HEIGHT - 100);
-		
-		this.speed = Math.min(speed, GameConstant.MAX_SPEED);
-		this.damage = Math.min(damage, GameConstant.MAX_DAMAGE);
-		particle = new ArrayList<Particle>();
-		
-		animation = new LiveAnimation();
-		animation.setFrames(ImageSpriteLoader.Spacecraft[0]);
+	public Player() {
+		this(PlayerConstant.HEALTH, PlayerConstant.SPEED, PlayerConstant.DAMAGE);
 	}
+	
+	public Player(int health, int speed, double damage) {
+		super(health, GameManager.WIDTH/2, GameManager.HEIGHT + 100);
+		
+		speed = Math.min(speed, PlayerConstant.MAX_SPEED);
+		this.damage = Math.min(damage, PlayerConstant.MAX_DAMAGE);
+		this.speed = speed;
+		particle = new ArrayList<Particle>();
 
-	@Override
-	public void fire() {
-		if (disabledShoot) {
-			return;
-		}
-		if (fireCooldown<=0) {
-			if (InputHandler.getKeyPressed(KeyEvent.VK_SPACE)) {
-				fireCooldown = SHOOT_DELAY;
-				//TODO Spawn new Bullet
-				//MainGame.getInstance().add(new Bullet(x, y, damage, this));
-			}
-			return;
-		}
-		fireCooldown--;
+		moveCount = moveDuration;
+		frameCount = frameDuration;
+		fireCooldown = SHOOT_DELAY;
+		
+		setAnimation(ImageSpriteLoader.SpacecraftSprite);
+		setAct(1);
+		setFrame(17); /*Middle frame*/
+		setCollisionBox(ImageSpriteLoader.SpacecraftCollision);
 	}
 
 	@Override
 	public void update() {
-		if (destroyed) {
-			if (animation.isFinished()) {
-				// TODO Game Over
-				MainGame.GameState.gameover();
+		// CHANGE STATE
+		switch (getState()) {
+		case SPAWNING:
+			if (y<=GameManager.HEIGHT-100) {
+				ready();
 			}
-			animation.update();
+			break;
+		case ATK:
+			// TODO
+			if (true) {
+				// Spawn bullet
+				if (GameManager.getGameScene() instanceof StageScene) {
+					StageScene scene = (StageScene)GameManager.getGameScene();
+					scene.getCurrentWave().addEnitity(new Bullet(x, y, damage, -5, this));
+				}
+				// ready
+				ready();
+			}
+			break;
+		case DESTROYING:
+			if (isEndAnimation()) {
+				setState(DESTROYED);
+			}
+			break;
+		case DESTROYED:
+			return;
+		default:
+			break;
+		}
+		
+		// State is spawning or ready
+		if (getState() == SPAWNING || getState() == READY) {
+			move();
+			if (fireCooldown>0) fireCooldown--;
+			if (InputUtility.getKeyPressed(KeyEvent.VK_SPACE))
+				atk();
+		}
+
+		updateFrame();
+	}
+
+	private void ready() {
+		setState(READY);
+		setAct(0);
+	}
+	
+	public void atk() {
+		if (disabledShoot)
+			return;
+		if (fireCooldown<=0) {
+			fireCooldown = SHOOT_DELAY;			
+			setState(ATK);
+			// TODO Particle
+		}
+	}
+	
+	private void move() {
+		if (moveCount > 0) {
+			moveCount--;
+			return;
+		}
+
+		moveCount = moveDuration;
+		if (getState() == SPAWNING) {
+			y = y - speedY;
 			return;
 		}
 		
-		if (InputHandler.getKeyPressed(KeyEvent.VK_LEFT)) {
-			x = Math.max(70, x-speed);
-			((LiveAnimation)animation).setDirectionFrame(LiveAnimation.BACKWARD);
-		} else if (InputHandler.getKeyPressed(KeyEvent.VK_RIGHT)) {
-			x = Math.min(MainGame.WIDTH-60, x+speed);
-			((LiveAnimation)animation).setDirectionFrame(LiveAnimation.FORWARD);
+		if (InputUtility.getKeyPressed(KeyEvent.VK_LEFT)) {
+			setX(x-speed);
+		} else if (InputUtility.getKeyPressed(KeyEvent.VK_RIGHT)) {
+			setX(x+speed);
 		}
-		
-		if (respawnCount > 0) {
-			respawnCount--;
+	}
+	
+	private void updateFrame() {
+		if (frameCount > 0) {
+			frameCount--;
 			return;
-		} else if(respawnCount == 0) {
-			respawnCount--;
-			animation.setFrames(ImageSpriteLoader.Spacecraft[0]);
-			disabledShoot = false;
 		}
-		// Fire
-		fire();
-		
-		animation.update();
+		frameCount = frameDuration;
+		if (getState() == DESTROYING) {
+			setFrame(getFrame()+1);
+		} else {
+			if (InputUtility.getKeyPressed(KeyEvent.VK_LEFT)) {
+				setFrame(getFrame()-1);
+			} else if (InputUtility.getKeyPressed(KeyEvent.VK_RIGHT)) {
+				setFrame(getFrame()+1);
+			} else {
+				if (getFrame() < 18) {
+					setFrame(getFrame()+1);
+				} else if (getFrame() > 18){
+					setFrame(getFrame()-1);
+				}
+			}
+		}
 	}
 	
 	public void hit() {
 		health = Math.max(0, health-1);
-		if (health > 0) {
-			disabledShoot = true;
-			respawnCount = RESPWAN_DELAY;
-			animation.setFrames(ImageSpriteLoader.Spacecraft[1]);
-		} else {
-			animation = new Animation(ImageSpriteLoader.Spacecraft[2],2);
-			destroyed = true;
+		// TODO spawn particle boom at x, y
+		if (health <= 0) {
+			destroy();
 		}
 	}
-
-	public boolean isDisabledShoot() {
-		return disabledShoot;
+	
+	@Override
+	public void destroy() {
+		setState(DESTROYING);
+		frameDuration = DESTROY_FRAME_DELAY;
+		frameCount = frameDuration;
+		//FIXME
+		setAct(4);
 	}
-
-	public void setDisabledShoot(boolean disabledShoot) {
-		this.disabledShoot = disabledShoot;
-	}
-
+	
 	@Override
 	public boolean collideWith(ICollidable obj) {
-		Polygon hitPolygon = obj.getPolygon();
+		Polygon hitPolygon = obj.getCollisionBox();
 		if (sheilded) {
-			for (int i=0;i<obj.getPolygon().xpoints.length;i++) {
+			for (int i=0;i<obj.getCollisionBox().xpoints.length;i++) {
 				if ( Math.hypot(hitPolygon.xpoints[i]+obj.getX()-x,
 						hitPolygon.ypoints[i]+obj.getY()-y) >= 45 ) {
 					return true;
@@ -127,13 +184,25 @@ public class Player extends Entity implements IShootable {
 	}
 	
 	@Override
-	public int getZ() {
-		return 1;
+	public void draw(Graphics2D graphics2d) {
+		if (isVisible()) {
+			if (GameConstant.WIRE_FRAME) {
+				graphics2d.setColor(Color.BLUE);
+				getCollisionBox().translate(x, y);
+				graphics2d.drawPolygon(getCollisionBox());
+				getCollisionBox().translate(-x, -y);
+			}
+			graphics2d.drawImage(getImage(), null, x-60, y-60);
+		}
 	}
 	
+	public boolean isDisabledShoot() { return disabledShoot; }
+	public void setDisabledShoot(boolean disabledShoot) { this.disabledShoot = disabledShoot; }
 	@Override
-	public void draw(Graphics2D graphics2d) {
-		graphics2d.drawImage(animation.getImage(), null, x-60, y-60);
+	public int getZ() { return 1; }
+	private void setX(int x) {
+		if (x>=79 && x<=GameManager.WIDTH-79)
+			this.x = x;
 	}
 	
 }

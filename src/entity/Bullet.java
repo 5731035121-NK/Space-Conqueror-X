@@ -1,54 +1,96 @@
 package entity;
 
-import entity.animation.LiveAnimation;
-import entity.animation.LoopAnimation;
-import game.MainGame;
+import game.GameManager;
 
+import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.Polygon;
+import java.awt.event.KeyEvent;
 
+import utility.GameConstant;
 import utility.ImageSpriteLoader;
+import utility.InputUtility;
 
 public class Bullet extends Entity {
 
+	private int moveCount, moveDuration = 1;
+	private int frameCount, frameDuration = 1;
 	private int speed;
 	private double damage;
 	private Entity attacker;
-	private LoopAnimation animation;
 	
-	public Bullet(int x, int y, double damage, Entity attacker) {
+	public Bullet(int x, int y, double damage, int speed, Entity attacker) {
 		super(1, x, y);
 		
-		this.speed = 5; 
+		this.speed = speed;
+		moveCount = moveDuration;
 		this.damage = damage;
 		this.attacker = attacker;
-		animation = new LoopAnimation();
-		animation.setFrames(ImageSpriteLoader.Bullet[0]);
 		
-		int xpoints[] = {-5, 5, -5, 5};
-		int ypoints[] = {-15, -15, 15, 15};
-		Polygon p = new Polygon(xpoints, ypoints, 4); 
-		setPolygon(p);
+		setAnimation(ImageSpriteLoader.BulletSprite);
+		setAct(0);
+		setCollisionBox(ImageSpriteLoader.BulletCollision);
 	}
 	
-	public void update() {		
-		if (y<MainGame.HEIGHT) {
-			y = y - speed; 
-		} else {
-			destroyed = true;
+	public void update() {
+		if (getState() == DESTROYED)
+			return;
+		if (0 > getY() || getY() >= GameManager.HEIGHT) {
+			destroy();
+			return;
 		}
 		
-		animation.update();
+		move();
+		
+		updateFrame();
+	}
+	
+	private void move() {
+		if (moveCount > 0) {
+			moveCount--;
+			return;
+		}
+		moveCount = moveDuration;
+		y = y + speed;
+	}
+	
+	private void updateFrame() {
+		if (frameCount > 0) {
+			frameCount--;
+			return;
+		}
+		frameCount = frameDuration;
 	}
 	
 	@Override
 	public void draw(Graphics2D graphics2d) {
-		graphics2d.drawImage(animation.getImage(), null, x-5, y-15);
+		if (isVisible()) {
+			if (GameConstant.WIRE_FRAME) {
+				graphics2d.setColor(Color.BLUE);
+				getCollisionBox().translate(x, y);
+				graphics2d.drawPolygon(getCollisionBox());
+				getCollisionBox().translate(-x, -y);
+			}
+			graphics2d.drawImage(getImage(), null, x-20	, y-50);
+		}
 	}
 
 	@Override
 	public int getZ() {
 		return 2;
+	}
+	
+	public double getDamage() {
+		return damage;
+	}
+	
+	public Entity getAttacker() {
+		return attacker;
+	}
+
+	@Override
+	public void destroy() {
+		setState(DESTROYED);
 	}
 	
 }

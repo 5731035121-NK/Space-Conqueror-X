@@ -3,8 +3,12 @@ package entity;
 import java.awt.Polygon;
 
 public interface ICollidable {
-	public Polygon getPolygon();
-	public int getX();
-	public int getY();
-	public boolean collideWith(ICollidable obj);
+	
+	int getX();
+	int getY();
+	boolean collideWith(ICollidable obj);
+	void setCollisionBox(Polygon[][] collisionBox);
+	//void setCollisionBox(Polygon p, int act, int frame);
+	Polygon getCollisionBox();
+	
 }

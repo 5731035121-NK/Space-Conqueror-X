@@ -2,6 +2,6 @@ package entity;
 
 public interface IShootable {
 	
-	void fire();
+	void atk();
 	
 }
