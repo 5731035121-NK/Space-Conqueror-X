@@ -1,5 +1,7 @@
 package game.gamescene;
 
+import java.awt.Color;
+
 import game.GameManager;
 
 public class WaveController implements Runnable {
@@ -11,6 +13,14 @@ public class WaveController implements Runnable {
 		this.wave = wave;
 		this.prevThread = prevThread;
 	}
+
+	public synchronized void togglePause() {
+		if (prevThread == null || !prevThread.isAlive()) {
+			wave.setPause(!wave.isPause());
+		}
+		
+		notifyAll();
+	}
 	
 	@Override
 	public void run() {
@@ -21,27 +31,30 @@ public class WaveController implements Runnable {
 			e.printStackTrace();
 		}
 
-		wave.setPause(true);
 		while (true) {
 			try {
 				Thread.sleep(GameManager.REFRESH_DELAY);
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
-			synchronized (wave) {
-				if (!wave.isPause()) {
+			if (wave.getState() == WaveGameState.DEAD) {
+				break;
+			}
+			synchronized (this) {
+				if (wave.isPause()) {
 					try {
-						wave.wait();
+						wait();
 					} catch (InterruptedException e) {
 						e.printStackTrace();
 					}
 				}
 			}
-			wave.updateLogic();
 			GameManager.getGameScene().repaint();
-			if (wave.clearDestroyed()) {
+			wave.updateLogic();
+			wave.clearDestroyed();
+			/*if (wave.clearDestroyed()) {
 				break;
-			}
+			}*/
 		}
 	}
 

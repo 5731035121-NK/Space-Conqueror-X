@@ -1,9 +1,12 @@
 package game.gamescene;
 
+import java.awt.Component;
+
+import javax.swing.JComponent;
+
 public interface GameScene {
 	
 	void updateLogic();
-	boolean isPause();
-	void setPause(boolean pause);
+	int getState();
 	
 }

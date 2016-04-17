@@ -1,76 +1,105 @@
 package game.gamescene;
 
+import java.awt.AlphaComposite;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Point;
 import java.awt.event.KeyEvent;
-import java.awt.event.KeyListener;
-import java.awt.event.MouseEvent;
-import java.awt.event.MouseListener;
-import java.awt.event.MouseMotionListener;
 import java.util.ArrayList;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import javax.swing.JPanel;
 
 import entity.Player;
+import entity.enemy.Boss;
 import entity.enemy.Enemy;
 import entity.enemy.EnemyGroup;
-import entity.enemy.OneEnemiesGroup;
 import entity.enemy.OneEnemy;
+import exception.FileFormatException;
+import exception.FileMissingException;
 import game.GameManager;
+import utility.GameLoader;
 import utility.InputUtility;
+import utility.GameLoader.WaveLoader;
 
 public class StageScene extends JPanel implements GameScene {
 
+	public static StageScene instance;
+	protected static final AlphaComposite transcluentBlack = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.7f);
+	protected static final AlphaComposite opaque = AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1);
+	
 	private WaveGameState waveGameState[];
 	private WaveController waveController[];
 	private Thread thread[];
 	private int currentWave;
+	public Player player;
 	
-	private boolean pause;
+	private boolean error, gameover;
 	
-	public StageScene(int Stage) {
-		addListener();
+	public StageScene(int Stage, int subStage) {
+		gameover = false;
+		
 		validate();
-		
-		currentWave = 0;
-		waveGameState = new WaveGameState[1];
-		waveController = new WaveController[1];
-		thread = new Thread[1];
-		
-		Player player = new Player();
-		player.setDisabledShoot(true );
-		
-		/*
-		GameLoader.loadStage(Stage);
-		*/
-		// Test stage
-		CopyOnWriteArrayList<EnemyGroup> enemyGroups = new CopyOnWriteArrayList<EnemyGroup>();
-		CopyOnWriteArrayList<Enemy> enemies = new CopyOnWriteArrayList<Enemy>();
-		
-		OneEnemiesGroup group1 = new OneEnemiesGroup(enemies, 20,
-				50, 50, GameManager.WIDTH-50, 200,
-				1, 2);
-		enemies.add(new OneEnemy(1, 160, -20, group1));
-		enemies.add(new OneEnemy(1, 240, -20, group1));
-		enemies.add(new OneEnemy(1, 320, -20, group1));
-		enemyGroups.add(group1);
-		
-		waveGameState[0] = new WaveGameState(player, enemyGroups);
-		waveController[0] = new WaveController(waveGameState[0], null);
-		thread[0] = new Thread(waveController[0]);
-		currentWave = 0;
-		
-		add(waveGameState[0]);
+
+		try {
+			GameLoader.loadStage(Stage, subStage);
+			currentWave = 0;
+			waveGameState = new WaveGameState[GameLoader.numberWave];
+			waveController = new WaveController[GameLoader.numberWave];
+			thread = new Thread[GameLoader.numberWave];
+			
+			player = new Player();
+			int i = 0;
+
+			for (WaveLoader wave : GameLoader.wave) {
+				waveGameState[i] = new WaveGameState(this, wave.getWaveName(), wave.getEnemyGroups());				
+				if (i > 0)
+					waveController[i] = new WaveController(waveGameState[i], thread[i-1]);
+				else 
+					waveController[i] = new WaveController(waveGameState[i], null);
+				thread[i] = new Thread(waveController[i]);
+				i++;
+			}
+		} catch (FileMissingException | FileFormatException e) {
+			error = true;
+		}
 	}
 	
 	@Override
-	public void updateLogic() {}
+	public synchronized void updateLogic() {
+		if (error) {
+			GameManager.switchScene(TitleScene.getInstance());
+			return;
+		}
+		if (!thread[currentWave].isAlive()) {
+			if (thread.length <= currentWave+1) {
+				if (gameover)
+					return;
+				
+				gameover = true;
+				for (WaveGameState waveGameState : waveGameState) {
+					waveGameState.forceEnd();
+				}
+				// TODO END WAVE
+				GameManager.switchScene(new AfterStageScene(true));
+			} else {
+				currentWave++;
+			}
+		} else {
+			if (InputUtility.isPauseButton() || InputUtility.isMouseLeftClicked() && waveGameState[currentWave].isPause() ) {
+				waveController[currentWave].togglePause();
+			}
+		}
+	}
+	
+	public synchronized void togglePause() {
+		waveController[currentWave].togglePause();
+	}
 	
 	@Override
-	public void paint(Graphics g) {
+	public synchronized void paint(Graphics g) {
 		Graphics2D g2d = (Graphics2D) g;
 		
 		// assign the background color to be "black"
@@ -81,101 +110,52 @@ public class StageScene extends JPanel implements GameScene {
 		g2d.clearRect(0, 0, (int)dimension.getWidth(), (int)dimension.getHeight());
 		
 		// paint Current Wave
-		waveGameState[currentWave].paint(g);
+		if (waveGameState != null) {
+			waveGameState[currentWave].paint(g);
+			
+			// paint Pause Screen 
+			if (waveGameState[currentWave].isPause()) {
+				g2d.setComposite(transcluentBlack);
+				g2d.setColor(Color.BLACK);
+				g2d.fillRect(0, 0, 800, 600);
+				g2d.setComposite(opaque);
+			}
+		}
 	}
 	
-	public WaveGameState getCurrentWave() {
+	public synchronized WaveGameState getCurrentWave() {
 		return waveGameState[currentWave];
 	}
-
-	public void startAllThread() {
-		thread[0].start();
+	
+	public synchronized Player getPlayer() {
+		return player;
 	}
 	
-	@Override
-	public boolean isPause() {
-		return pause;
-	}
-
-	@Override
-	public void setPause(boolean pause) {
-		this.pause = pause;
+	public synchronized void setPlayer(Player player) {
+		this.player = player;
 	}
 	
-	private void addListener(){
-		this.addMouseListener(new MouseListener() {
-			
-			@Override
-			public void mouseReleased(MouseEvent e) {
-				InputUtility.setMouseLeftDown(false);
-			}
-			
-			@Override
-			public void mousePressed(MouseEvent e) {
-				if (e.getButton() == 1) {
-					InputUtility.setMouseLeftDown(true);
-				}
-			}
-			
-			@Override
-			public void mouseExited(MouseEvent e) {
-				InputUtility.setMouseOnScreen(false);
-			}
-			
-			@Override
-			public void mouseEntered(MouseEvent e) {
-				InputUtility.setMouseOnScreen(true);
-			}
-			
-			@Override
-			public void mouseClicked(MouseEvent e) {
-				// TODO Auto-generated method stub
-				
-			}
-		});
+	public synchronized int getState() {
+		return waveGameState[currentWave].getState();
+	}
+
+	public synchronized void startAllThread() {
+		if (thread != null)
+		for (Thread t : thread) {
+			t.start();
+		}
+	}
+
+	public synchronized void gameover() {
+		if (gameover)
+			return;
 		
-		//MouseMotionListener
-		this.addMouseMotionListener(new MouseMotionListener() {
-			
-			@Override
-			public void mouseMoved(MouseEvent e) {
-				if (InputUtility.isMouseOnScreen()) {
-					InputUtility.setMouseX(e.getX());
-					InputUtility.setMouseY(e.getY());
-				}
-			}
-			
-			@Override
-			public void mouseDragged(MouseEvent e) {
-				if (InputUtility.isMouseOnScreen()) {
-					InputUtility.setMouseX(e.getX());
-					InputUtility.setMouseY(e.getY());
-				}
-			}
-		});
-		
-		//KeyListener
-		this.addKeyListener(new KeyListener() {
-			
-			@Override
-			public void keyTyped(KeyEvent e) {
-				
-			}
-			
-			@Override
-			public void keyReleased(KeyEvent e) {
-				InputUtility.setKeyTriggered(e.getKeyCode(), false);
-				InputUtility.setKeyPressed(e.getKeyCode(), false);
-			}
-			
-			@Override
-			public void keyPressed(KeyEvent e) {
-				if (InputUtility.getKeyPressed(e.getKeyCode()) == false) {
-					InputUtility.setKeyPressed(e.getKeyCode(), true);
-					InputUtility.setKeyTriggered(e.getKeyCode(), true);
-				}
-			}
-		});
+		gameover = true;
+		for (WaveGameState waveGameState : waveGameState) {
+			waveGameState.forceEnd();
+		}
+		// TODO END GAME
+		GameManager.switchScene(new AfterStageScene(false));
 	}
 	
 }

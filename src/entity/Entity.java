@@ -15,24 +15,26 @@ public abstract class Entity implements IRenderable, ICollidable {
 	public static final int DESTROYING = 5;
 	public static final int DESTROYED = -1;
 	
-	private BufferedImage[][] animation;
-	private Polygon[][] collisionBox;
-	private int act, frame;
-	private boolean endAnimation;
+	protected BufferedImage[][] animation;
+	protected int[][] frameDuration; 
+	protected Polygon[][] collisionBox;
+	protected int frameCounter, act, frame;
 
 	protected double health;
-	protected int x, y;
-	private int state;
+	protected double x, y;
+	protected boolean willAttack;
+	protected int state;
+	private boolean endAnimation;
 	
-	public Entity(double health, int x, int y) {
+	public Entity(double health, double x, double y) {
 		this.health = Math.min(health, PlayerConstant.MAX_HEALTH);
 		this.x = x;
 		this.y = y;
 		
 		act = 0;
 		frame = 0;
-		state = SPAWNING;
 		endAnimation = false;
+		state = SPAWNING;
 	}
 	
 	@Override
@@ -66,8 +68,12 @@ public abstract class Entity implements IRenderable, ICollidable {
 	
 	public abstract void destroy(); 
 
-	public int getX() { return x; }
-	public int getY() { return y; }
+	public double getHealth() {
+		return health;
+	}
+	
+	public double getX() { return x; }
+	public double getY() { return y; }
 	public void setCollisionBox(Polygon[][] collisionBox) { this.collisionBox = collisionBox; }
 	public Polygon getCollisionBox() {
 		try {
@@ -76,54 +82,72 @@ public abstract class Entity implements IRenderable, ICollidable {
 			return new Polygon();
 		}
 	}
-	public double getHealth() { return health; }
-	protected int getState() { return state; }
-	protected void setState(int state) { this.state = state; }
 	public boolean isDestroyed() { return state == DESTROYED; }
-	
+	public boolean isReady() { return state == READY; }
 	public boolean isVisible() { return true; }
-	public void setAnimation(BufferedImage[][] animation) {
+	protected void setAnimation(BufferedImage[][] animation) {
 		act = 0;
 		frame = 0;
 		this.animation = animation;
 	}
 	public BufferedImage getImage() {
-		if (animation[act][frame] == null)
+		try {
+			return animation[act][frame];
+		} catch (Exception e) {
 			return null;
-		return animation[act][frame];
+		}
 	}
-	public boolean isEndAnimation() {
-		return endAnimation;
+
+	public void setReady() {
+		state = READY;
+		setAct(0);
+		setFrame(0);
 	}
-	public void setAct(int act) {
-		/*if (act >= animation.length) {
-			System.err.println("setAct(act): act is more than animation.lenght");
-			return;
-		}*/
+	
+	public void setAttack() {
+		state = ATK;
+	}
+	
+	protected void setAct(int act) {
 		this.act = act;
+		endAnimation = false;
 	}
 	public int getAct() {
 		if (animation == null)
 			return -1;
 		return act; 
 	}
-	public void setFrame(int frame) {
-		endAnimation = false;
-		if (frame >= animation[act].length) {
+	protected void setFrame(int frame) {
+		if (frameDuration[act] == null) {
 			endAnimation = true;
 			return;
-		} else if (frame < 0) {
+		}
+		if (frame >= frameDuration[act].length) {
+			endAnimation = true; 
 			return;
 		}
-		this.frame = frame;
+		
+		if (0 <= frame && frame < frameDuration[act].length) {
+			this.frame = frame;
+			endAnimation = false;
+		}
+			
 	}
 	public int getFrame() {
 		if (animation == null)
 			return -1;
 		return frame;
 	}
-	public int getNumFrame() {
-		return animation[act].length;
+	protected boolean isEndAnimation() {
+		if (endAnimation)
+			return true;
+		return false;
+	}
+	protected int getNumberFrame() {
+		return frameDuration[act].length;
 	}
 	
+	public void willAttack() {
+		this.willAttack = true;
+	}
 }

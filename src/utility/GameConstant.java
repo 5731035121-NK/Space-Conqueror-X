@@ -2,6 +2,6 @@ package utility;
 
 public class GameConstant {
 	
-	public static final boolean WIRE_FRAME = true; 
+	public static boolean WIRE_FRAME = false;
 	
 }
